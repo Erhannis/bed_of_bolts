@@ -13,6 +13,7 @@ use <deps.link/scadFluidics/common.scad>
 use <deps.link/quickfitPlate/blank_plate.scad>
 use <deps.link/getriebe/Getriebe.scad>
 use <deps.link/gearbox/gearbox.scad>
+use <parametricPulley.scad>
 
 $FOREVER = 1000;
 DUMMY = false;
@@ -22,10 +23,10 @@ MKFN = $fn;
 //RAINY Maybe a SCALE variable?
 
 SCALE = 1.0;
-SLOP = 0.25;
+SLOP = 0.4;
 SLOP2 = SLOP*2;
 BOLT_OD = 10*SCALE;
-BOLT_RETAINER_T = 2*SCALE; //THINK Not sure abt scale
+BOLT_RETAINER_T = DUMMY ? -SLOP2 : 2*SCALE; //THINK Not sure abt scale
 BOLT_RETAINER_L = 15*SCALE;
 BOLT_RETAINER_D = BOLT_OD*0.2;
 NON_LOAD_T = 1; //THINK Maybe scale?
@@ -34,9 +35,21 @@ TRANSFER_WALL = 2*SCALE;
 TRANSFER_TEETH = ceil(15*SCALE);
 INTERLOCK_SZ = 10*SCALE;
 TRANSFER_SZ = 2*INTERLOCK_SZ;
-HOHLRAD_OD = 2*TRANSFER_WALL + pfeilrad_dims(modul=1, zahnzahl=TRANSFER_TEETH, breite=TRANSFER_SZ, bohrung=BOLT_OD+SLOP2, eingriffswinkel=20, schraegungswinkel=0, optimiert=false)[0];
+PFEILRAD_DIMS = pfeilrad_dims(modul=1, zahnzahl=TRANSFER_TEETH, breite=TRANSFER_SZ, bohrung=BOLT_OD+SLOP2, eingriffswinkel=20, schraegungswinkel=0, optimiert=false);
+PFEILRAD_OD = PFEILRAD_DIMS[0];
+PFEILRAD_ID = PFEILRAD_DIMS[2];
+HOHLRAD_OD = 2*TRANSFER_WALL + PFEILRAD_OD;
 
-module TransferStirnrad(sz=TRANSFER_SZ,bore=BOLT_OD+SLOP2,chamfer1=true,chamfer2=true) {
+DRIVE_SLEEVE_A_TEETH = ceil(47*SCALE);
+DRIVE_SLEEVE_A_OD = tooth_spacing(2,0.254,DRIVE_SLEEVE_A_TEETH);
+DRIVE_SLEEVE_A_SZ = pulley_height();
+DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ = 2.5;
+DRIVE_SLEEVE_A_RETAINING_GROOVE_T = 2.5;
+
+DRIVE_SLEEVE_B_FLANGE_D = (BOLT_OD+10*2)*SCALE;
+DRIVE_SLEEVE_B_FLANGE_T = 6*SCALE;
+
+module TransferStirnrad(sz=TRANSFER_SZ-SLOP2,bore=BOLT_OD+SLOP2,chamfer1=true,chamfer2=true,slopwall=0) {
   difference() {
     stirnrad(modul=1, zahnzahl=TRANSFER_TEETH, breite=sz, bohrung=bore, eingriffswinkel=20, schraegungswinkel=0, optimiert=false);
     if (chamfer1) {
@@ -46,16 +59,19 @@ module TransferStirnrad(sz=TRANSFER_SZ,bore=BOLT_OD+SLOP2,chamfer1=true,chamfer2
       tz(sz) TransferChamfersInner();
     }
   }
+  if (slopwall > 0) {
+    tz(sz) tube(od=PFEILRAD_ID, id=bore, h=slopwall);
+  }
 }
 
-module TransferHohlrad(sz=TRANSFER_SZ,chamfer1=true,chamfer2=true) {
+module TransferHohlrad(sz=TRANSFER_SZ-SLOP2,chamfer1=true,chamfer2=true,slopwall=0) {
   difference() {
     // Bulk
     cylinder(d=HOHLRAD_OD,h=sz);
     // Gear pattern
     minkowski() {
       stirnrad(modul=1, zahnzahl=TRANSFER_TEETH, breite=sz, bohrung=BOLT_OD+SLOP2, eingriffswinkel=20, schraegungswinkel=0, optimiert=false);
-      cylinder(d=SLOP,h=0.01,center=true,$fn=MKFN);
+      cylinder(d=SLOP2,h=0.01,center=true,$fn=MKFN);
     }
     // Central hole
     cylinder(d=BOLT_OD+SLOP2,h=$FOREVER,center=true);
@@ -67,27 +83,28 @@ module TransferHohlrad(sz=TRANSFER_SZ,chamfer1=true,chamfer2=true) {
       tz(sz) TransferChamfersOuter();
     }
   }
-}
-
-module TransferBlank() {
-
+  if (slopwall > 0) {
+    tz(sz) tube(od=HOHLRAD_OD, id=PFEILRAD_OD+SLOP2, h=slopwall);
+  }
 }
 
 module TransferSleeve() {
-  TransferStirnrad(chamfer1=false);
-  tz(-1*INTERLOCK_SZ) difference() {
-    cylinder(d=HOHLRAD_OD, h=INTERLOCK_SZ);
-    cylinder(d=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
-  }
-  tz(-3*INTERLOCK_SZ) TransferHohlrad(chamfer2=false);
+  //THINK This MIGHT be better for stability, but also uses space
+  //tz(2*INTERLOCK_SZ) tube(od=PFEILRAD_ID, id=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
+
+  TransferStirnrad();
+  
+  tz(-1*INTERLOCK_SZ) tube(od=PFEILRAD_ID, id=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
+  tz(-2*INTERLOCK_SZ) tube(od1=HOHLRAD_OD, od2=PFEILRAD_ID, id1=PFEILRAD_OD+SLOP2, id2=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
+  //tz(-2*INTERLOCK_SZ) tube(od=HOHLRAD_OD, id=PFEILRAD_OD+SLOP2, h=INTERLOCK_SZ/2);
+  
+  tz(-4*INTERLOCK_SZ) TransferHohlrad(chamfer2=false,slopwall=SLOP2);
+  
+  //DUMMY Outer clutch rings
 }
 
 module BoltCore(negative=false) {
   if (negative) {
-//    minkowski() {
-//      BoltCore(negative=false);
-//      cylinder(d=SLOP2,h=0.01,center=true,$fn=MKFN);
-//    }
     threaded_rod(d=BOLT_OD+SLOP2);
   } else {
     threaded_rod(d=BOLT_OD);
@@ -103,17 +120,29 @@ module Bolt() {
 }
 
 module Housing() {
+  tz(2*INTERLOCK_SZ) TransferHohlrad(sz=INTERLOCK_SZ-SLOP2);
 }
 
 module ClutchGear() {
 }
 
 module DriveSleeveA() {
-
+  difference() {
+    union() {
+      TransferHohlrad(sz=DRIVE_SLEEVE_A_SZ);
+      
+      // GT2 timing belt teeth
+      difference() {
+        pulley("GT2 2mm" , DRIVE_SLEEVE_A_OD, 0.764, 1.494, DRIVE_SLEEVE_A_TEETH, cutouts=false);
+        cylinder(d=PFEILRAD_OD+SLOP2,h=$FOREVER,center=true);
+      }
+    }
+    
+    rring_center = 0.5*(DRIVE_SLEEVE_A_OD+PFEILRAD_OD);
+    tz(pulley_height()) tube(id=rring_center-DRIVE_SLEEVE_A_RETAINING_GROOVE_T-SLOP2, od=rring_center+DRIVE_SLEEVE_A_RETAINING_GROOVE_T+SLOP2, h=2*(DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ+SLOP), center=true);
+  }
 }
 
-DRIVE_SLEEVE_B_FLANGE_D = (BOLT_OD+10*2)*SCALE;
-DRIVE_SLEEVE_B_FLANGE_T = 5*SCALE;
 
 module DriveSleeveB() {
   difference() {
@@ -134,15 +163,15 @@ module BoltRetainer() {
   }
   
   // Fins
-  cmy() mz() ty((BOLT_OD/2)-BOLT_RETAINER_D) tx(-BOLT_RETAINER_T/2) cube([BOLT_RETAINER_T, BOLT_RETAINER_D*2, BOLT_RETAINER_L]);
+  cmy() mz() ty((BOLT_OD/2)-BOLT_RETAINER_D) tx(-BOLT_RETAINER_T/2) tz(-NON_LOAD_T) cube([BOLT_RETAINER_T, BOLT_RETAINER_D*2, BOLT_RETAINER_L+NON_LOAD_T]);
 }
 
-module Assembly() {
+module Assembly(engaged=true) {
   Housing();
-  Bolt();
+  tz(4) Bolt();
   DriveSleeveA();
-  //tz(-30) DriveSleeveB();
-  tz(SLOP) TransferSleeve();
+  tz(-4*INTERLOCK_SZ) DriveSleeveB();
+  tz(engaged ? SLOP : INTERLOCK_SZ) TransferSleeve();
   ClutchGear();
   tz(45) BoltRetainer(); //CHECK Maybe top AND bottom?
 }
@@ -150,15 +179,9 @@ module Assembly() {
 
 
 
-*difference() {
-  Assembly();
-  OXp();
-}
-
 difference() {
-  BoltCore(negative=true);
-  BoltCore(negative=false);
-  OXp();
+  Assembly(true);
+  OXpYm();
 }
 
 // schnecke(modul=1, gangzahl=2, laenge=15, bohrung=4, eingriffswinkel=20, steigungswinkel=10, zusammen_gebaut=true);
@@ -178,3 +201,5 @@ module TransferChamfersInner() {
     cmz() cylinder(d1=1,d2=0,h=1,$fn=MKFN);
   }
 }
+
+
