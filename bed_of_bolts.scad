@@ -26,9 +26,6 @@ SCALE = 1.0;
 SLOP = 0.4;
 SLOP2 = SLOP*2;
 BOLT_OD = 10*SCALE;
-BOLT_RETAINER_T = DUMMY ? -SLOP2 : 2*SCALE; //THINK Not sure abt scale
-BOLT_RETAINER_L = 15*SCALE;
-BOLT_RETAINER_D = BOLT_OD*0.2;
 NON_LOAD_T = 1; //THINK Maybe scale?
 
 TRANSFER_WALL = 2*SCALE;
@@ -40,14 +37,20 @@ PFEILRAD_OD = PFEILRAD_DIMS[0];
 PFEILRAD_ID = PFEILRAD_DIMS[2];
 HOHLRAD_OD = 2*TRANSFER_WALL + PFEILRAD_OD;
 
+BOLT_RETAINER_T = DUMMY ? -SLOP2 : 2*SCALE; //THINK Not sure abt scale
+BOLT_RETAINER_L = INTERLOCK_SZ;
+BOLT_RETAINER_D = BOLT_OD*0.2;
+
 DRIVE_SLEEVE_A_TEETH = ceil(47*SCALE);
 DRIVE_SLEEVE_A_OD = tooth_spacing(2,0.254,DRIVE_SLEEVE_A_TEETH);
 DRIVE_SLEEVE_A_SZ = pulley_height();
 DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ = 2.5;
 DRIVE_SLEEVE_A_RETAINING_GROOVE_T = 2.5;
+DRIVE_SLEEVE_A_RRING_CENTER = 0.5*(DRIVE_SLEEVE_A_OD+PFEILRAD_OD);
 
 DRIVE_SLEEVE_B_FLANGE_D = (BOLT_OD+10*2)*SCALE;
 DRIVE_SLEEVE_B_FLANGE_T = 6*SCALE;
+DRIVE_SLEEVE_B_FLANGE_SOCKET_T = DRIVE_SLEEVE_B_FLANGE_T;
 
 module TransferStirnrad(sz=TRANSFER_SZ-SLOP2,bore=BOLT_OD+SLOP2,chamfer1=true,chamfer2=true,slopwall=0) {
   difference() {
@@ -98,7 +101,7 @@ module TransferSleeve() {
   tz(-2*INTERLOCK_SZ) tube(od1=HOHLRAD_OD, od2=PFEILRAD_ID, id1=PFEILRAD_OD+SLOP2, id2=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
   //tz(-2*INTERLOCK_SZ) tube(od=HOHLRAD_OD, id=PFEILRAD_OD+SLOP2, h=INTERLOCK_SZ/2);
   
-  tz(-4*INTERLOCK_SZ) TransferHohlrad(chamfer2=false,slopwall=SLOP2);
+  tz(-4*INTERLOCK_SZ) TransferHohlrad(slopwall=SLOP2);
   
   //DUMMY Outer clutch rings
 }
@@ -120,7 +123,41 @@ module Bolt() {
 }
 
 module Housing() {
-  tz(2*INTERLOCK_SZ) TransferHohlrad(sz=INTERLOCK_SZ-SLOP2);
+  HOUSING_OD = HOHLRAD_OD+20;
+  
+  difference() {
+    union() {
+      tz(3*INTERLOCK_SZ) difference() {
+        tube(id=BOLT_OD+SLOP2,od=HOUSING_OD,h=INTERLOCK_SZ);
+        cmy() ty((BOLT_OD/2)-BOLT_RETAINER_D) ty(-SLOP) translate([-(BOLT_RETAINER_T+SLOP2)/2,0,-$FOREVER/2]) cube([BOLT_RETAINER_T+SLOP2, BOLT_RETAINER_D*2+SLOP2, $FOREVER]);
+      }
+      
+      tz(2*INTERLOCK_SZ) {
+        TransferHohlrad(sz=INTERLOCK_SZ,chamfer2=false);
+        tube(id=HOHLRAD_OD,od=HOUSING_OD,h=INTERLOCK_SZ);
+      }
+      tz(DRIVE_SLEEVE_A_SZ+SLOP) tube(id=PFEILRAD_OD+SLOP2, od=HOUSING_OD, h=2*INTERLOCK_SZ-DRIVE_SLEEVE_A_SZ-SLOP);
+
+      // Drive Sleeve A retaining ring
+      rring_center = DRIVE_SLEEVE_A_RRING_CENTER;
+      tz(DRIVE_SLEEVE_A_SZ) mz() tube(id=rring_center-DRIVE_SLEEVE_A_RETAINING_GROOVE_T, od=rring_center+DRIVE_SLEEVE_A_RETAINING_GROOVE_T, h=2*(DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ), center=true);
+      tz(-SLOP) mz() tube(od=HOUSING_OD, id1=PFEILRAD_OD+SLOP2, id2=HOUSING_OD, h=(HOUSING_OD-(PFEILRAD_OD+SLOP2))/2);
+      
+      tube(id=DRIVE_SLEEVE_A_OD+3, od=HOUSING_OD, h=DRIVE_SLEEVE_A_SZ+SLOP);
+      
+      // Tall wall
+      bottom = 4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP;
+      mz() tube(id=DRIVE_SLEEVE_A_OD+3, od=HOUSING_OD, h=bottom);
+      
+      // Drive flange socket
+      //DUMMY Will need more space for transfer sleeve rings
+      tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP+DRIVE_SLEEVE_B_FLANGE_T+SLOP) tube(id=HOHLRAD_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
+      tz(-bottom) tube(id=BOLT_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
+    }
+    // VSlots
+    ctranslate([0,0,-2.5*INTERLOCK_SZ]) tz(DRIVE_SLEEVE_A_SZ/2) crotate([0,0,90]) cmx() tx(DRIVE_SLEEVE_A_OD/2+1) vslot([4,100,10]);
+    tz(-3*INTERLOCK_SZ) crotate([0,0,90]) vslot([10,100,10]);
+  }
 }
 
 module ClutchGear() {
@@ -138,7 +175,7 @@ module DriveSleeveA() {
       }
     }
     
-    rring_center = 0.5*(DRIVE_SLEEVE_A_OD+PFEILRAD_OD);
+    rring_center = DRIVE_SLEEVE_A_RRING_CENTER;
     tz(pulley_height()) tube(id=rring_center-DRIVE_SLEEVE_A_RETAINING_GROOVE_T-SLOP2, od=rring_center+DRIVE_SLEEVE_A_RETAINING_GROOVE_T+SLOP2, h=2*(DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ+SLOP), center=true);
   }
 }
@@ -168,30 +205,32 @@ module BoltRetainer() {
 
 module Assembly(engaged=true) {
   Housing();
-  tz(4) Bolt();
+  tz(-2) Bolt();
   DriveSleeveA();
   tz(-4*INTERLOCK_SZ) DriveSleeveB();
   tz(engaged ? SLOP : INTERLOCK_SZ) TransferSleeve();
   ClutchGear();
-  tz(45) BoltRetainer(); //CHECK Maybe top AND bottom?
+  //tz(4*INTERLOCK_SZ) BoltRetainer(); //CHECK Maybe top AND bottom?
 }
 
 
 
-
+//BoltRetainer();
 difference() {
   Assembly(true);
-  OXpYm();
+//  OXpYm();
+  //OZp([0,0,35]);
 }
 
 // schnecke(modul=1, gangzahl=2, laenge=15, bohrung=4, eingriffswinkel=20, steigungswinkel=10, zusammen_gebaut=true);
 
 // schneckenradsatz(modul=1, zahnzahl=30, gangzahl=2, breite=8, laenge=20, bohrung_schnecke=4, bohrung_rad=4, eingriffswinkel=20, steigungswinkel=10, optimiert=true, zusammen_gebaut=true);
 
+//DUMMY This isn't handling slop correctly
 module TransferChamfersOuter() {
   minkowski() {
     stirnrad(modul=1, zahnzahl=TRANSFER_TEETH, breite=0.01, bohrung=BOLT_OD+SLOP2, eingriffswinkel=20, schraegungswinkel=0, optimiert=false);
-    cmz() cylinder(d1=1,d2=0,h=1,$fn=MKFN);
+    cmz() cylinder(d1=1+SLOP2,d2=0,h=1+SLOP2,$fn=MKFN);
   }
 }
 
