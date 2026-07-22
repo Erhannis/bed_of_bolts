@@ -218,7 +218,7 @@ module Assembly(engaged=true) {
 //BoltRetainer();
 difference() {
   Assembly(true);
-//  OXpYm();
+  OXpYm();
   //OZp([0,0,35]);
 }
 
@@ -240,5 +240,15 @@ module TransferChamfersInner() {
     cmz() cylinder(d1=1,d2=0,h=1,$fn=MKFN);
   }
 }
+
+/*
+Notes from test print:
+Transfer sleeve was great.
+DriveSleeveB was quite difficult to free, and quite sticky after.
+Bolt was welded in by the threads.
+DriveSleeveA was stuck REAL good, and the groove was VERY sticky even after freeing
+  Extend bottom to V point on wall?
+  Hollow out groove ring to upside-down V?
+*/
 
 
