@@ -43,12 +43,14 @@ BOLT_RETAINER_D = BOLT_OD*0.2;
 
 DRIVE_SLEEVE_A_TEETH = ceil(47*SCALE);
 DRIVE_SLEEVE_A_OD = tooth_spacing(2,0.254,DRIVE_SLEEVE_A_TEETH);
+DRIVE_SLEEVE_A_OD2 = DRIVE_SLEEVE_A_OD+(4/3); //RAINY Should probably be calculated in parametricPulley.scad, not hardcoded
 DRIVE_SLEEVE_A_SZ = pulley_height();
 DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ = 2.5;
 DRIVE_SLEEVE_A_RETAINING_GROOVE_T = 2.5;
 DRIVE_SLEEVE_A_RRING_CENTER = 0.5*(DRIVE_SLEEVE_A_OD+PFEILRAD_OD);
+DRIVE_SLEEVE_A_FOOT_SZ = (DRIVE_SLEEVE_A_OD2-(PFEILRAD_OD+SLOP2))/2;
 
-DRIVE_SLEEVE_B_FLANGE_D = (BOLT_OD+10*2)*SCALE;
+DRIVE_SLEEVE_B_FLANGE_D = HOHLRAD_OD+4*SCALE;
 DRIVE_SLEEVE_B_FLANGE_T = 6*SCALE;
 DRIVE_SLEEVE_B_FLANGE_SOCKET_T = DRIVE_SLEEVE_B_FLANGE_T;
 
@@ -108,9 +110,9 @@ module TransferSleeve() {
 
 module BoltCore(negative=false) {
   if (negative) {
-    threaded_rod(d=BOLT_OD+SLOP2);
+    threaded_rod(d=BOLT_OD+SLOP2, pitch = DUMMY ? 8 : 2);
   } else {
-    threaded_rod(d=BOLT_OD);
+    threaded_rod(d=BOLT_OD, pitch = DUMMY ? 8 : 2);
   }
 }
 
@@ -124,7 +126,25 @@ module Bolt() {
 
 module Housing() {
   HOUSING_OD = HOHLRAD_OD+20;
+  bottom = 4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP;
   
+  // Drive Sleeve A retaining ring
+  tz(DRIVE_SLEEVE_A_SZ-DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ) rotate_extrude() {
+    x = DRIVE_SLEEVE_A_RETAINING_GROOVE_T/2;
+    y = DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ/2;
+    tx(DRIVE_SLEEVE_A_RRING_CENTER/2) polygon([
+      [-x,2*y],
+      //[-x/2,y], // Wall groove
+      [-x,0],
+      [0,x], // Center groove
+      [x,0],
+      //[x/2,y], // Wall groove
+      [x,2*y],
+      [x,20],
+      [-x,20],
+    ]);
+  }
+
   difference() {
     union() {
       tz(3*INTERLOCK_SZ) difference() {
@@ -137,26 +157,28 @@ module Housing() {
         tube(id=HOHLRAD_OD,od=HOUSING_OD,h=INTERLOCK_SZ);
       }
       tz(DRIVE_SLEEVE_A_SZ+SLOP) tube(id=PFEILRAD_OD+SLOP2, od=HOUSING_OD, h=2*INTERLOCK_SZ-DRIVE_SLEEVE_A_SZ-SLOP);
-
-      // Drive Sleeve A retaining ring
-      rring_center = DRIVE_SLEEVE_A_RRING_CENTER;
-      tz(DRIVE_SLEEVE_A_SZ) mz() tube(id=rring_center-DRIVE_SLEEVE_A_RETAINING_GROOVE_T, od=rring_center+DRIVE_SLEEVE_A_RETAINING_GROOVE_T, h=2*(DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ), center=true);
-      tz(-SLOP) mz() tube(od=HOUSING_OD, id1=PFEILRAD_OD+SLOP2, id2=HOUSING_OD, h=(HOUSING_OD-(PFEILRAD_OD+SLOP2))/2);
       
-      tube(id=DRIVE_SLEEVE_A_OD+3, od=HOUSING_OD, h=DRIVE_SLEEVE_A_SZ+SLOP);
+      // Drive Sleeve A support ledge
+      tz(-DRIVE_SLEEVE_A_FOOT_SZ-SLOP) mz() tube(od=MAIN_CHAMBER_ID, id1=DRIVE_SLEEVE_A_OD2-SLOP2*2, id2=MAIN_CHAMBER_ID, h=(MAIN_CHAMBER_ID-(DRIVE_SLEEVE_A_OD2-SLOP2*2))/2);
+
+      MAIN_CHAMBER_ID = DRIVE_SLEEVE_A_OD+3;
+            
+      tube(id=MAIN_CHAMBER_ID, od=HOUSING_OD, h=DRIVE_SLEEVE_A_SZ+SLOP);
       
       // Tall wall
-      bottom = 4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP;
-      mz() tube(id=DRIVE_SLEEVE_A_OD+3, od=HOUSING_OD, h=bottom);
+      mz() tube(id=MAIN_CHAMBER_ID, od=HOUSING_OD, h=bottom);
       
       // Drive flange socket
       //DUMMY Will need more space for transfer sleeve rings
       tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP+DRIVE_SLEEVE_B_FLANGE_T+SLOP) tube(id=HOHLRAD_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
+      tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T) tube(id=DRIVE_SLEEVE_B_FLANGE_D+SLOP2*2, od=HOUSING_OD, h=SLOP+DRIVE_SLEEVE_B_FLANGE_T+SLOP);
       tz(-bottom) tube(id=BOLT_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
     }
-    // VSlots
-    ctranslate([0,0,-2.5*INTERLOCK_SZ]) tz(DRIVE_SLEEVE_A_SZ/2) crotate([0,0,90]) cmx() tx(DRIVE_SLEEVE_A_OD/2+1) vslot([4,100,10]);
-    tz(-3*INTERLOCK_SZ) crotate([0,0,90]) vslot([10,100,10]);
+    
+    // Slots
+    slot_adjust = 1;
+    ctranslate([0,0,-2.5*INTERLOCK_SZ]) tz(DRIVE_SLEEVE_A_SZ/2) crotate([0,0,90]) cmx() tx(DRIVE_SLEEVE_A_OD/2+1-slot_adjust/2) house([4+slot_adjust,100,10]);
+    tz(-bottom+5+DRIVE_SLEEVE_B_FLANGE_SOCKET_T) crotate([0,0,90]) house([10,100,10]);
   }
 }
 
@@ -173,10 +195,15 @@ module DriveSleeveA() {
         pulley("GT2 2mm" , DRIVE_SLEEVE_A_OD, 0.764, 1.494, DRIVE_SLEEVE_A_TEETH, cutouts=false);
         cylinder(d=PFEILRAD_OD+SLOP2,h=$FOREVER,center=true);
       }
+      
+      // Support foot
+      mz() tube(od=DRIVE_SLEEVE_A_OD2, id1=PFEILRAD_OD+SLOP2, id2=DRIVE_SLEEVE_A_OD2, h=DRIVE_SLEEVE_A_FOOT_SZ);
     }
     
+    // Retaining ring
     rring_center = DRIVE_SLEEVE_A_RRING_CENTER;
-    tz(pulley_height()) tube(id=rring_center-DRIVE_SLEEVE_A_RETAINING_GROOVE_T-SLOP2, od=rring_center+DRIVE_SLEEVE_A_RETAINING_GROOVE_T+SLOP2, h=2*(DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ+SLOP), center=true);
+    rrxslop = SLOP*3;
+    tz(pulley_height()) tube(id=rring_center-DRIVE_SLEEVE_A_RETAINING_GROOVE_T-rrxslop, od=rring_center+DRIVE_SLEEVE_A_RETAINING_GROOVE_T+rrxslop, h=2*(DRIVE_SLEEVE_A_RETAINING_GROOVE_SZ+SLOP), center=true);
   }
 }
 
@@ -187,7 +214,32 @@ module DriveSleeveB() {
       mz() cylinder(d=DRIVE_SLEEVE_B_FLANGE_D,h=DRIVE_SLEEVE_B_FLANGE_T);
       TransferStirnrad(bore=0,chamfer1=false);
     }
+    
+    // Bolt threads
     BoltCore(negative=true);
+    
+    // Chamfer
+    tz(-DRIVE_SLEEVE_B_FLANGE_T) cylinder(d1=BOLT_OD+SLOP2*2, d2=0, h=(BOLT_OD+SLOP2*2)/2);
+    
+    // VSlot
+    vsx = 2;
+    vsy = $FOREVER;
+    vsz = 2;
+    vsd = 3;
+    tz(-DRIVE_SLEEVE_B_FLANGE_T/2) crotate([0,0,90]) cmy() ty(DRIVE_SLEEVE_B_FLANGE_D/2 - vsd) ty(vsy/2) vslot([vsx,vsy,vsz]);
+    
+    // Underside v-grooves
+    tz(-DRIVE_SLEEVE_B_FLANGE_T) rotate_extrude() {
+//      ctranslate([
+//        [DRIVE_SLEEVE_B_FLANGE_D/2,0],
+//      ]) rz(-45) square(center=true);
+      rz(-45) union() {
+        d = 2;
+        for (i=[sqrt(0.5)*DRIVE_SLEEVE_B_FLANGE_D/2:-d:sqrt(0.5)*BOLT_OD/2]) {
+          translate([i,i]) square(d, center=true);
+        }
+      }
+    }
   }
 }
 
@@ -243,12 +295,17 @@ module TransferChamfersInner() {
 
 /*
 Notes from test print:
-Transfer sleeve was great.
-DriveSleeveB was quite difficult to free, and quite sticky after.
-Bolt was welded in by the threads.
-DriveSleeveA was stuck REAL good, and the groove was VERY sticky even after freeing
-  Extend bottom to V point on wall?
-  Hollow out groove ring to upside-down V?
+*Transfer sleeve was great.
+*DriveSleeveB was quite difficult to free, and quite sticky after.
+  *groove bottom
+  *twist handholds
+  *smaller groove
+*Bolt was welded in by the threads.
+  *Print separately, I guess
+  *Also, chamfer bottom of DriveSleeveB
+*DriveSleeveA was stuck REAL good, and the groove was VERY sticky even after freeing
+  *Extend bottom to V point on wall?
+  *Hollow out groove ring to upside-down V?
 */
 
 
