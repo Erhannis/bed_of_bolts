@@ -17,7 +17,7 @@ use <parametricPulley.scad>
 
 $FOREVER = 1000;
 DUMMY = false;
-$fn = DUMMY ? 10 : 60;
+$fn = DUMMY ? 20 : 60;
 MKFN = $fn;
 
 //RAINY Maybe a SCALE variable?
@@ -37,6 +37,9 @@ PFEILRAD_OD = PFEILRAD_DIMS[0];
 PFEILRAD_ID = PFEILRAD_DIMS[2];
 HOHLRAD_OD = 2*TRANSFER_WALL + PFEILRAD_OD;
 
+HOUSING_OD = 50-SLOP;
+echo("HOUSING_OD", HOUSING_OD);
+
 BOLT_RETAINER_T = DUMMY ? -SLOP2 : 2*SCALE; //THINK Not sure abt scale
 BOLT_RETAINER_L = INTERLOCK_SZ;
 BOLT_RETAINER_D = BOLT_OD*0.2;
@@ -53,6 +56,19 @@ DRIVE_SLEEVE_A_FOOT_SZ = (DRIVE_SLEEVE_A_OD2-(PFEILRAD_OD+SLOP2))/2;
 DRIVE_SLEEVE_B_FLANGE_D = HOHLRAD_OD+4*SCALE;
 DRIVE_SLEEVE_B_FLANGE_T = 6*SCALE;
 DRIVE_SLEEVE_B_FLANGE_SOCKET_T = DRIVE_SLEEVE_B_FLANGE_T;
+
+RIB_PITCH = 2;
+RIB_ANGLE = 45;
+RIB_DEPTH = 0.5*RIB_PITCH*tan(90-RIB_ANGLE);
+CLUTCH_INTERMEDIARY_T = 3;
+CLUTCH_INTERMEDIARY_RIB_ID = HOHLRAD_OD+2*RIB_DEPTH+2*SLOP;
+CLUTCH_SLEEVE_THREAD_ID = CLUTCH_INTERMEDIARY_RIB_ID+2*CLUTCH_INTERMEDIARY_T+2.5+SLOP2; // Like, in the valley
+CLUTCH_SLEEVE_T = 2;
+CLUTCH_SLEEVE_SZ = 2*INTERLOCK_SZ;
+CLUTCH_SLEEVE_OD = CLUTCH_SLEEVE_THREAD_ID+CLUTCH_SLEEVE_T;
+CLUTCH_SLEEVE_GT_TEETH = ceil(59*SCALE);
+CLUTCH_SLEEVE_GT_OD = tooth_spacing(2,0.254,CLUTCH_SLEEVE_GT_TEETH);
+CLUTCH_SLEEVE_GT_OD2 = CLUTCH_SLEEVE_GT_OD+(4/3); //RAINY Should probably be calculated in parametricPulley.scad, not hardcoded
 
 module TransferStirnrad(sz=TRANSFER_SZ-SLOP2,bore=BOLT_OD+SLOP2,chamfer1=true,chamfer2=true,slopwall=0) {
   difference() {
@@ -97,15 +113,20 @@ module TransferSleeve() {
   //THINK This MIGHT be better for stability, but also uses space
   //tz(2*INTERLOCK_SZ) tube(od=PFEILRAD_ID, id=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
 
+  // Upper stirnrad
   TransferStirnrad();
   
+  // Straight tube
   tz(-1*INTERLOCK_SZ) tube(od=PFEILRAD_ID, id=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
-  tz(-2*INTERLOCK_SZ) tube(od1=HOHLRAD_OD, od2=PFEILRAD_ID, id1=PFEILRAD_OD+SLOP2, id2=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
-  //tz(-2*INTERLOCK_SZ) tube(od=HOHLRAD_OD, id=PFEILRAD_OD+SLOP2, h=INTERLOCK_SZ/2);
   
+  // Taper
+  tz(-2*INTERLOCK_SZ) tube(od1=HOHLRAD_OD, od2=PFEILRAD_ID, id1=PFEILRAD_OD+SLOP2, id2=BOLT_OD+SLOP2, h=INTERLOCK_SZ);
+  
+  // Lower hohlrad
   tz(-4*INTERLOCK_SZ) TransferHohlrad(slopwall=SLOP2);
   
-  //DUMMY Outer clutch rings
+  // Outer clutch rings
+  tz(-4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+SLOP) ribbing(angle=RIB_ANGLE,pitch=RIB_PITCH,id=HOHLRAD_OD,h=INTERLOCK_SZ);
 }
 
 module BoltCore(negative=false) {
@@ -125,7 +146,6 @@ module Bolt() {
 }
 
 module Housing() {
-  HOUSING_OD = HOHLRAD_OD+20;
   bottom = 4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP;
   
   // Drive Sleeve A retaining ring
@@ -167,22 +187,117 @@ module Housing() {
       
       // Tall wall
       mz() tube(id=MAIN_CHAMBER_ID, od=HOUSING_OD, h=bottom);
-      
+        
       // Drive flange socket
-      //DUMMY Will need more space for transfer sleeve rings
+      //// Upper slab
       tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP+DRIVE_SLEEVE_B_FLANGE_T+SLOP) tube(id=HOHLRAD_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
+      //// Middle, outer ring
       tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T) tube(id=DRIVE_SLEEVE_B_FLANGE_D+SLOP2*2, od=HOUSING_OD, h=SLOP+DRIVE_SLEEVE_B_FLANGE_T+SLOP);
-      tz(-bottom) tube(id=BOLT_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
+      //// Bottom slab
+      difference() {
+        tz(-bottom) tube(id=BOLT_OD+SLOP2, od=HOUSING_OD, h=DRIVE_SLEEVE_B_FLANGE_SOCKET_T);
+        // Bolt retainer slot
+        cmy() ty((BOLT_OD/2)-BOLT_RETAINER_D) ty(-SLOP) translate([-(BOLT_RETAINER_T+SLOP2)/2,0,-$FOREVER/2]) cube([BOLT_RETAINER_T+SLOP2, BOLT_RETAINER_D*2+SLOP2, $FOREVER]);
+      }
     }
     
-    // Slots
-    slot_adjust = 1;
-    ctranslate([0,0,-2.5*INTERLOCK_SZ]) tz(DRIVE_SLEEVE_A_SZ/2) crotate([0,0,90]) cmx() tx(DRIVE_SLEEVE_A_OD/2+1-slot_adjust/2) house([4+slot_adjust,100,10]);
-    tz(-bottom+5+DRIVE_SLEEVE_B_FLANGE_SOCKET_T) crotate([0,0,90]) house([10,100,10]);
+    { // Slots
+      slot_adjust = 1;
+      tz(DRIVE_SLEEVE_A_SZ/2) crotate([0,0,180]) crotate([0,0,90]) translate((DRIVE_SLEEVE_A_OD/2+1-slot_adjust/2)*[1,1,0]) {
+        house([4+slot_adjust,100,10]);
+        houseCorner([4+slot_adjust,100,10]);
+      }
+      
+      slot2_oz = -0.7; //MISC Not sure where this number comes from; I just wanted the bottom to be flush with the floor
+      tz(-3*INTERLOCK_SZ+slot2_oz/2) tz(DRIVE_SLEEVE_A_SZ/2) crotate([0,0,180]) crotate([0,0,90]) translate((DRIVE_SLEEVE_A_OD/2+3)*[1,1,0]) {
+        house([5,100,14-slot2_oz]);
+        rz(180) houseCorner([5,100,14-slot2_oz],bounds=20*SCALE);
+      }
+      
+      
+      // Drive Sleeve B access slots
+      tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T) crotate([0,0,90]) ty(-50) tx(-5) house([10,100,6], center=false);
+    }
+    
+    // Main chamber //RAINY Probably should just be built-in
+    //THINK Should we add lateral/radial bracing at top/bottom of clutch sleeve?
+    chamber_wall = 3;
+    house_sx = HOUSING_OD-2*chamber_wall-CLUTCH_SLEEVE_OD;
+    house_sz = SLOP+CLUTCH_SLEEVE_SZ+SLOP-(house_sx/2);
+    tz(-bottom+DRIVE_SLEEVE_B_FLANGE_SOCKET_T+SLOP+DRIVE_SLEEVE_B_FLANGE_T+SLOP+DRIVE_SLEEVE_B_FLANGE_SOCKET_T) hull() rotate_extrude() {
+      tx(-(HOUSING_OD/2)+chamber_wall) house2d([house_sx,house_sz],center=false);
+    }
+  }
+  
+  // Clutch Intermediary rotation stops
+  tz(-4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+SLOP) ClutchIntermediaryRotationStops(negative=false);
+}
+
+CLUTCH_INTERMEDIARY_STOPS_T = 1.5;
+
+module ClutchIntermediaryRotationStops(negative=false) {
+  center_d = CLUTCH_INTERMEDIARY_RIB_ID+CLUTCH_INTERMEDIARY_T;
+  difference() {
+    if (negative) {
+      tube(id=center_d-CLUTCH_INTERMEDIARY_STOPS_T-SLOP2,od=center_d+CLUTCH_INTERMEDIARY_STOPS_T+SLOP2,h=2*INTERLOCK_SZ);
+    } else {
+      // Angled top supports
+      tz(2*INTERLOCK_SZ) tube(id1=center_d-CLUTCH_INTERMEDIARY_STOPS_T,od1=center_d+CLUTCH_INTERMEDIARY_STOPS_T,id2=center_d-CLUTCH_INTERMEDIARY_STOPS_T+20,od2=center_d+CLUTCH_INTERMEDIARY_STOPS_T+20,h=10);
+      
+      // Straight bit
+      tube(id=center_d-CLUTCH_INTERMEDIARY_STOPS_T,od=center_d+CLUTCH_INTERMEDIARY_STOPS_T,h=2*INTERLOCK_SZ);
+    }
+    crotate([0,0,180]) crotate([0,0,90]) crotate([0,0,45]) difference() {
+      OXp();
+      rz(90/4) OXp();
+    }
   }
 }
 
-module ClutchGear() {
+module ClutchIntermediary() {
+  rib_id = CLUTCH_INTERMEDIARY_RIB_ID;
+
+  difference() {
+    union() {
+      // Ribbing
+      difference() {
+        tz(RIB_PITCH/2) cylinder(d=rib_id, h=INTERLOCK_SZ-RIB_PITCH);
+        cylinder(d=HOHLRAD_OD+2*SLOP, h=INTERLOCK_SZ);
+        ribbing(angle=RIB_ANGLE,pitch=RIB_PITCH,id=HOHLRAD_OD+2*SLOP,h=INTERLOCK_SZ);
+        cylinder(d=HOHLRAD_OD);
+      }
+      
+      difference() {
+        thread_sz = INTERLOCK_SZ;
+        tz(thread_sz/2) threaded_rod(d=rib_id+2*CLUTCH_INTERMEDIARY_T+2.5, l=thread_sz);
+        cylinder(d=rib_id,h=$FOREVER,center=true);
+      }
+    }
+    
+    // Rotation stops
+    ClutchIntermediaryRotationStops(negative=true);
+  }
+}
+
+module ClutchSleeve() {
+  rib_id = CLUTCH_INTERMEDIARY_RIB_ID;
+  
+  thread_id = CLUTCH_SLEEVE_THREAD_ID;  
+  thread_sz = CLUTCH_SLEEVE_SZ;
+  // Wall and inner threading
+  difference() {
+    cylinder(d=CLUTCH_SLEEVE_OD, h=thread_sz);
+    tz(thread_sz/2) threaded_rod(d=thread_id, l=thread_sz);
+  }
+  
+  // GT2 timing belt teeth
+  tz(INTERLOCK_SZ-pulley_height()/2) {
+    difference() {
+      pulley("GT2 2mm", CLUTCH_SLEEVE_GT_OD, 0.764, 1.494, CLUTCH_SLEEVE_GT_TEETH, cutouts=false);
+      cylinder(d=CLUTCH_SLEEVE_OD,h=$FOREVER,center=true);
+    }
+    mz() tube(id=CLUTCH_SLEEVE_OD,od1=CLUTCH_SLEEVE_GT_OD2,od2=CLUTCH_SLEEVE_OD,h=(CLUTCH_SLEEVE_GT_OD2-CLUTCH_SLEEVE_OD)/2);
+  }
 }
 
 module DriveSleeveA() {
@@ -192,7 +307,7 @@ module DriveSleeveA() {
       
       // GT2 timing belt teeth
       difference() {
-        pulley("GT2 2mm" , DRIVE_SLEEVE_A_OD, 0.764, 1.494, DRIVE_SLEEVE_A_TEETH, cutouts=false);
+        pulley("GT2 2mm", DRIVE_SLEEVE_A_OD, 0.764, 1.494, DRIVE_SLEEVE_A_TEETH, cutouts=false);
         cylinder(d=PFEILRAD_OD+SLOP2,h=$FOREVER,center=true);
       }
       
@@ -261,7 +376,10 @@ module Assembly(engaged=true) {
   DriveSleeveA();
   tz(-4*INTERLOCK_SZ) DriveSleeveB();
   tz(engaged ? SLOP : INTERLOCK_SZ) TransferSleeve();
-  ClutchGear();
+  tz(-4*INTERLOCK_SZ+DRIVE_SLEEVE_B_FLANGE_T+SLOP) {
+    tz(engaged ? SLOP : INTERLOCK_SZ) ClutchIntermediary();
+    tz(SLOP) ClutchSleeve();
+  }
   //tz(4*INTERLOCK_SZ) BoltRetainer(); //CHECK Maybe top AND bottom?
 }
 
@@ -270,7 +388,7 @@ module Assembly(engaged=true) {
 //BoltRetainer();
 difference() {
   Assembly(true);
-  OXpYm();
+  //OXpYm();
   //OZp([0,0,35]);
 }
 
@@ -278,7 +396,7 @@ difference() {
 
 // schneckenradsatz(modul=1, zahnzahl=30, gangzahl=2, breite=8, laenge=20, bohrung_schnecke=4, bohrung_rad=4, eingriffswinkel=20, steigungswinkel=10, optimiert=true, zusammen_gebaut=true);
 
-//DUMMY This isn't handling slop correctly
+//RAINY This isn't handling slop correctly
 module TransferChamfersOuter() {
   minkowski() {
     stirnrad(modul=1, zahnzahl=TRANSFER_TEETH, breite=0.01, bohrung=BOLT_OD+SLOP2, eingriffswinkel=20, schraegungswinkel=0, optimiert=false);
@@ -294,18 +412,13 @@ module TransferChamfersInner() {
 }
 
 /*
-Notes from test print:
-*Transfer sleeve was great.
-*DriveSleeveB was quite difficult to free, and quite sticky after.
-  *groove bottom
-  *twist handholds
-  *smaller groove
-*Bolt was welded in by the threads.
-  *Print separately, I guess
-  *Also, chamfer bottom of DriveSleeveB
-*DriveSleeveA was stuck REAL good, and the groove was VERY sticky even after freeing
-  *Extend bottom to V point on wall?
-  *Hollow out groove ring to upside-down V?
+Todo:
+
+Clutch mechanism
+  *add ribbing to transfer sleeve
+  *add rotation stops to clutch intermediary
+
+*Add house-corner-cutout 
 */
 
 
